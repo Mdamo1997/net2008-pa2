@@ -2,3 +2,5 @@ audit.json
 __pycache__/
 .venv/
 venv/
+PA2_policy.yaml
+PA2_sample1.xml
