@@ -1,6 +1,7 @@
 #Matthew D'Amour 040964438
 import xml.etree.ElementTree as ET
 import json
+import yaml
 
 class Device:
      """Parent class for devices"""
@@ -11,17 +12,25 @@ class Device:
             self.os = os_version
             self.owner = None
             self.interfaces = {}
+
+class InventoryInputError(Exception):
+     """Custom exception that handles invalid XML file input"""
+     pass
+
+class PolicyInputError(Exception):
+     """Custom exception that handles invalid YAML file input"""
+     pass
             
-def parse_inventory(file_xml):
-    """Parses xml file and extracts root element"""
+def parse_inventory(file_xml): #tier1
+    """Parses xml inventory file and extracts root element"""
     #parse file
     parsed_file = ET.parse(file_xml)
     #assign root element and site name
     root_element = parsed_file.getroot()
     site_name = root_element.get("site")
     return root_element, site_name
-
-def create_objects(root_element):
+ 
+def create_objects(root_element): #tier1
      """Creates a list of device objects from a root element"""
      device_objects = []
      device_list = root_element.findall("device")
@@ -42,7 +51,7 @@ def create_objects(root_element):
           device_objects.append(new_device)
      return device_objects     
           
-def count_data(device_objects):
+def count_data(device_objects): #tier1
      """Counts data inside a list of device objects"""
      #counters
      skipped_devices = 0
@@ -50,7 +59,7 @@ def count_data(device_objects):
      role_count = {}
      int_status_count = {"up": 0, "down": 0, "other": 0}
      #loops through device objects
-     for device in device_objects:
+     for device in device_objects: 
           #counts valid and invalid device id's
           if device.id is None:
                skipped_devices +=1
@@ -73,7 +82,7 @@ def count_data(device_objects):
                           "interfaces": int_status_count}
      return object_list_data
 
-def generate_report(count_data, site_name):
+def generate_report(count_data, site_name): #tier1
      """Creates audit.json report"""
      report_data ={
           "site": site_name,
@@ -86,6 +95,17 @@ def generate_report(count_data, site_name):
      }
      with open("audit.json", "w") as file:
           json.dump(report_data, file, indent=4)
+
+def parse_policy(file_yaml): #tier2
+     """Parses yaml policy file"""
+     with open(file_yaml, "r") as file:
+          policy_info = yaml.safe_load(file)
+     return policy_info
+
+def check_policy(device_objects, policy_info): #tier2
+     """Compares a list of device objects to specified policy requirements"""
+     violations = []
+     compliant = []
  
 def main():
     """Main pa2.py script function"""
@@ -93,6 +113,7 @@ def main():
     objects = create_objects(root)
     count = count_data(objects)
     generate_report(count, site)
+
 
 if __name__ == "__main__":
      main()
