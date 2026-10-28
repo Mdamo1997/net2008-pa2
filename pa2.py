@@ -112,20 +112,23 @@ def check_policy(device_objects, policy_info): #tier2
           role_check = check_role(device, policy_info)
           owner_check = check_owner(device, policy_info)
           int_check = check_interfaces(device, policy_info)
+          os_check = check_os(device, policy_info)
           if role_check is not None:
                violations.append(role_check)
           if owner_check is not None:
                violations.append(owner_check)
           if int_check is not None:
                violations.append(int_check)
-          if role_check is None and owner_check is None and int_check is None:
+          if os_check is not None:
+               violations.append(os_check)
+          if role_check is None and owner_check is None and int_check is None and os_check is None:
                compliant.append(device.id)
      compliant.sort()
      return violations, compliant
           
 def check_role(device, policy_info): #tier2
      """Checks if role in device object is valid according to YAML policy"""
-     #ensures min_os is in the policy
+     #ensures min_os is specified in the policy
      if "min_os" not in policy_info:
           return None
      if device.role not in policy_info["min_os"]:
@@ -146,6 +149,7 @@ def check_owner(device, policy_info): #tier2
 def check_interfaces(device, policy_info): #tier2
      """Checks status of device interfaces, counts number in down status and compares to maximum defined in policy"""
      down_count = 0
+     #ensures max interface is specified in the policy
      if "max_down_interfaces" not in policy_info:
           return None
      for status in device.interfaces.values():
@@ -155,8 +159,40 @@ def check_interfaces(device, policy_info): #tier2
           too_many_down = {"device": device.id, "type": "too_many_down", "down": down_count}
           return too_many_down
      return None
+
+def check_os(device, policy_info): #tier3
+     """Compares device objects os version to minimum specified in policy"""
+     #ensrues min os is specified in the policy
+     if "min_os" not in policy_info:
+          return None
+     #ensures device has a valid role
+     if device.role not in policy_info["min_os"]:
+          return None
+     #splits version numbers into lists
+     device_os = device.os.split(".")
+     min_version = policy_info["min_os"][device.role].split(".")
+     #converts values inside lists to integers
+     for i in range(len(device_os)):
+          device_os[i] = int(device_os[i])
+     for i in range(len(min_version)):
+          min_version[i] = int(min_version[i])
+     #ensures the list is not empty and removes trailing 0's
+     while device_os and device_os[-1] == 0:
+          device_os.pop()
+     while min_version and min_version[-1] == 0:
+          min_version.pop()
+     #compares versions
+     if device_os < min_version:
+          os_outdated = {"device": device.id, "type": "os_outdated", 
+                         "found": device.os, "required": policy_info["min_os"][device.role]}
+          return os_outdated
+     return None
      
- 
+
+
+
+     
+
 def main():
     """Main pa2.py script function"""
     root, site = parse_inventory("PA2_sample1.xml")
