@@ -2,6 +2,7 @@
 import xml.etree.ElementTree as ET
 import json
 import yaml
+import sys
 
 class Device:
      """Parent class for devices"""
@@ -12,6 +13,13 @@ class Device:
             self.os = os_version
             self.owner = None
             self.interfaces = {}
+     def count_down_int(self):
+          """Counts number of down interfaces present on the device"""
+          count = 0
+          for status in self.interfaces.values():
+               if status == "down":
+                    count +=1
+          return count
 
 class InventoryInputError(Exception):
      """Custom exception that handles invalid XML file input"""
@@ -23,8 +31,12 @@ class PolicyInputError(Exception):
             
 def parse_inventory(file_xml): #tier1
     """Parses xml inventory file and extracts root element"""
-    #parse file
-    parsed_file = ET.parse(file_xml)
+    try:
+          #parse file
+          parsed_file = ET.parse(file_xml)
+    #handles missing files and invalid xml formatting
+    except(OSError, ET.ParseError) as error:
+          raise InventoryInputError(f"Error reading {file_xml}: {error}") from error
     #assign root element and site name
     root_element = parsed_file.getroot()
     site_name = root_element.get("site")
@@ -95,11 +107,22 @@ def generate_report(count_data, violations, compliant, site_name): #tier1
      }
      with open("audit.json", "w") as file:
           json.dump(report_data, file, indent=4)
+     print("Audit completed. Report saved to audit.json")
 
 def parse_policy(file_yaml): #tier2
      """Parses yaml policy file"""
-     with open(file_yaml, "r") as file:
-          policy_info = yaml.safe_load(file)
+     
+     try:
+          with open(file_yaml, "r") as file:
+               policy_info = yaml.safe_load(file)
+     #handles missing files and invalid yaml formatting
+     except(OSError, yaml.YAMLError) as error:
+          raise PolicyInputError(f"Error reading {file_yaml}: {error}") from error
+     #ensures policy is a dict and works with empty files
+     if policy_info is None:
+               policy_info = {}
+     if not isinstance(policy_info, dict):
+          raise PolicyInputError(f"Invalid policy structure in {file_yaml}: expected a mapping")
      return policy_info
 
 def check_policy(device_objects, policy_info): #tier2
@@ -148,13 +171,10 @@ def check_owner(device, policy_info): #tier2
 
 def check_interfaces(device, policy_info): #tier2
      """Checks status of device interfaces, counts number in down status and compares to maximum defined in policy"""
-     down_count = 0
+     down_count = device.count_down_int()
      #ensures max interface is specified in the policy
      if "max_down_interfaces" not in policy_info:
           return None
-     for status in device.interfaces.values():
-          if status == "down":
-               down_count +=1
      if down_count > policy_info["max_down_interfaces"]:
           too_many_down = {"device": device.id, "type": "too_many_down", "down": down_count}
           return too_many_down
@@ -195,15 +215,22 @@ def check_os(device, policy_info): #tier3
 
 def main():
     """Main pa2.py script function"""
-    root, site = parse_inventory("PA2_sample1.xml")
-    objects = create_objects(root)
-    count = count_data(objects)
-    policy = parse_policy("PA2_policy.yaml")
-    violations, compliant = check_policy(objects, policy)
+    if len(sys.argv) != 3:
+         print("usage: python pa2.py INVENTORY.xml POLICY.yaml")
+         sys.exit(2)
+    try:
+          root, site = parse_inventory(sys.argv[1])
+          objects = create_objects(root)
+          count = count_data(objects)
+          policy = parse_policy(sys.argv[2])
+          violations, compliant = check_policy(objects, policy)
+    except(InventoryInputError, PolicyInputError) as error:
+         print(error)
+         sys.exit(1)
 
     generate_report(count, violations, compliant, site)
+    sys.exit(0)
     
-
 
 if __name__ == "__main__":
      main()
